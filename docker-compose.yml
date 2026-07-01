@@ -1,7 +1,7 @@
 serivces:
-  discord-bot:
+  protector-bot:
     build: .
-    container_name: protector_bot
+    container_name: protector-bot
     restart: unless-stopped
     tty: true
     environment:
