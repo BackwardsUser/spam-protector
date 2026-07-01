@@ -1,0 +1,8 @@
+serivces:
+  discord-bot:
+    build: .
+    container_name: protector_bot
+    restart: unless-stopped
+    tty: true
+    environment:
+      - TOKEN=${TOKEN}
