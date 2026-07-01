@@ -1,0 +1,21 @@
+{
+  "name": "protector",
+  "version": "1.0.0",
+  "description": "",
+  "license": "MIT",
+  "author": "Backwards",
+  "type": "commonjs",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "nodemon src/index.ts"
+  },
+  "devDependencies": {
+    "dotenv": "^17.4.2",
+    "nodemon": "^3.1.14",
+    "ts-node": "^10.9.2",
+    "typescript": "^6.0.3"
+  },
+  "dependencies": {
+    "discord.js": "^14.26.4"
+  }
+}
