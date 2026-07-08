@@ -1,7 +1,7 @@
 import { config as dotenvconfig } from "dotenv";
 dotenvconfig();
 
-import { Client, Events, GatewayIntentBits, TextChannel, PermissionsBitField } from "discord.js";
+import { Client, Events, GatewayIntentBits, TextChannel, PermissionsBitField, Message } from "discord.js";
 
 const intents = [
   GatewayIntentBits.Guilds,
@@ -19,41 +19,48 @@ client.once(Events.ClientReady, c => {
   console.log(`Successfully logged in as ${c.user.username}`);
 });
 
-interface UserPingData {
-  lastPing: Date;
-  pingsTotal: number;
+interface UserFlagData {
+  lastFlag: Date;
+  totalFlags: number;
   flaggedMessages: [string, string][];
 }
 
-const userPinged = new Map<string, UserPingData>();
+const userFlags = new Map<string, UserFlagData>();
 const ONE_HOUR = 60 * 60 * 1000;
-const MAX_PINGS = 3;
-const MUTE_DURATION = ONE_HOUR * 8;
+const MAX_FLAGS = 3;
+const MUTE_DURATION = ONE_HOUR * 8; // If this is changed to a different unit - Swap the unit in mute message
+const hasFlaggedContent = (message: Message) => (message.attachments?.size ?? 0) > 0;
+
+const messages = {
+  "MUTE_REASON": () => "Spamming",
+  "MESSAGE": (message: Message) => `<@${message.author.id}> You have sent a large number of mentions in a short time. You have been muted for ${MUTE_DURATION} hours.`,
+  "ADMIN_DM": (message: Message) => `⚠️ Excessive mentions detected from ${message.author.username} (<@${message.author.id}>)`
+}
 
 client.on(Events.MessageCreate, async message => {
   try {
     if (message.author.bot || whitelist.includes(message.author.id)) return;
 
-    const userData = userPinged.get(message.author.id) || {
-      lastPing: new Date(),
-      pingsTotal: 0,
+    const userData = userFlags.get(message.author.id) || {
+      lastFlag: new Date(),
+      totalFlags: 0,
       flaggedMessages: [],
     };
 
     // Reset if more than 1 hour has passed
-    if (Date.now() - userData.lastPing.getTime() > ONE_HOUR) {
-      userPinged.set(message.author.id, {
-        lastPing: new Date(),
-        pingsTotal: 0,
+    if (Date.now() - userData.lastFlag.getTime() > ONE_HOUR) {
+      userFlags.set(message.author.id, {
+        lastFlag: new Date(),
+        totalFlags: 0,
         flaggedMessages: [],
       });
       return;
     }
 
-    if (message.mentions.roles.size > 0 || message.mentions.users.size > 0) {
-      const newPings = userData.pingsTotal + 1;
+    if (hasFlaggedContent(message)) {
+      const newFlags = userData.totalFlags + 1;
 
-      if (newPings > MAX_PINGS) {
+      if (newFlags > MAX_FLAGS) {
         // Check if bot has permission to timeout members
         const member = await message.guild?.members.fetch(message.author.id);
         const botMember = await message.guild?.members.fetchMe();
@@ -69,20 +76,20 @@ client.on(Events.MessageCreate, async message => {
 
           if (canModerate) {
             try {
-              await member.timeout(MUTE_DURATION, "Excessive mentions");
+              await member.timeout(MUTE_DURATION, messages.MUTE_REASON());
               await message.channel.send(
-                `<@${message.author.id}> You have sent a large number of mentions in a short time. You have been muted for 8 hours.`
+                messages.MESSAGE(message)
               );
             } catch (timeoutError) {
               console.error("Failed to timeout user:", timeoutError);
               await message.channel.send(
-                `<@${message.author.id}> You have sent a large number of mentions in a short time. Please slow down! (Auto-mute failed - check bot permissions)`
+                messages.MESSAGE(message)
               );
             }
           } else {
             // Bot can't timeout, just warn
             await message.channel.send(
-              `<@${message.author.id}> You have sent a large number of mentions in a short time. Please slow down! (Bot lacks permission to mute)`
+              messages.MESSAGE(message)
             );
           }
         }
@@ -93,7 +100,7 @@ client.on(Events.MessageCreate, async message => {
           if (admin) {
             const dm = await admin.createDM(true);
             await dm.send(
-              `⚠️ Excessive mentions detected from ${message.author.username} (<@${message.author.id}>)`
+              messages.ADMIN_DM(message)
             );
             await dm.send({
               content: `\`${message.content}\``,
@@ -138,13 +145,13 @@ client.on(Events.MessageCreate, async message => {
         }
 
         // Clean up user data
-        userPinged.delete(message.author.id);
+        userFlags.delete(message.author.id);
       } else {
-        // Track the ping
+        // Track the flags
         userData.flaggedMessages.push([message.channel.id, message.id]);
-        userData.pingsTotal = newPings;
-        userData.lastPing = new Date();
-        userPinged.set(message.author.id, userData);
+        userData.totalFlags = newFlags;
+        userData.lastFlag = new Date();
+        userFlags.set(message.author.id, userData);
       }
     }
   } catch (error) {
